@@ -1,0 +1,44 @@
+# This Bash script enables one to download a list of FASTQ samples from NCBI to local machine, upload them to AWS S3 bucket and then delete them in the local machine (to save memory usage). 
+
+# Before that, let's install sra toolkit (https://github.com/ncbi/sra-tools)
+#install sra toolkit
+wget --output-document sratoolkit.tar.gz http://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz
+
+# extract tar.gz file 
+tar -vxzf sratoolkit.tar.gz
+
+# add binaries to path using export path or editing ~/.bashrc file
+export PATH=$PATH:./sratoolkit.2.11.2-ubuntu64/bin
+
+#Verify that the binaries will be found by the shell:
+which fastq-dump
+
+#configure
+vdb-config -i
+
+# Now, let's move on to download samples from NCBI database in which three example scripts were shown: 
+
+# 1. To download a list of samples from a single bioproject using WHILE nested in FOR loop 
+# In the example here, 'bioproject.txt' consists the list of NCBI samples to be downloaded
+
+for file in `ls bioproject.txt`; do
+while read line; do fasterq-dump ${line} -O /home/suetli/SC_bioproject/; 
+aws s3 cp /home/suetli/SC_bioproject/${line}_1.fastq s3://research/suetli/SC_bioproject/${line}_1.fastq; 
+aws s3 cp /home/suetli/SC_bioproject/${line}_2.fastq s3://research/suetli/SC_bioproject/${line}_2.fastq; 
+rm /home/suetli/SC_bioproject/${line}_[12].fastq; done < $file; done
+
+
+# 2. Another way to download samples from the accession list (downloadable from NCBI database) of a bioproject using 'cat' and 'xargs' command
+` cat accession.txt | xargs -n 1 fasterq-dump `
+
+
+# 3. To download samples from multiple bioprojects using nested WHILE loop
+# We need to create a text file listing all the bioproject numbers. As an example here, 'bioproject_16S.txt'
+# Name the files containing the samples according to the bioproject numbers, e.g., prjna631204.txt, prjna123456.txt, etc. 
+
+while read -r line || [[ -n $line ]]; do
+while read -r line2 || [[ -n $line2 ]]; do mkdir /home/suetli/public_16s/${line}/; 
+fasterq-dump ${line2} -O /home/suetli/public_16s/${line}/;
+aws s3 cp /home/suetli/public_16s/${line}/ s3://research/PRIVATE/suetli/public_16s/${line}/ --recursive;
+rm -r /home/suetli/public_16s/${line}/; done < ${line}.txt; done < bioproject_16S.txt
+
